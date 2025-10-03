@@ -50,14 +50,12 @@
   <div id="gameContainer"></div>
 
   <script>
-    let player, goal, cursors;
+    let player, goal;
     let walls = [];
     let obstacles = [];
     let sensitivity = 1, deadzone = 5, smoothing = 0;
     let vx=0, vy=0;
     let invertX = false;
-    let rawMode = true;
-    let locked = false;
     let playerColor = 0x0000ff;
     let wallColor = 0xaaaaaa;
     let goalColor = 0x00ff00;
@@ -68,6 +66,7 @@
     function resetGame() {
       overlay.style.display = 'none';
       player.x = 100; player.y = 100;
+      player.body.setVelocity(0,0);
     }
 
     const config = {
@@ -109,9 +108,7 @@
       });
 
       this.input.on('pointerdown', () => {
-        if (!locked) {
-          this.input.mouse.requestPointerLock();
-        }
+        this.input.mouse.requestPointerLock();
       });
 
       this.input.on('pointermove', (pointer) => {
@@ -121,8 +118,8 @@
           if (invertX) dx = -dx;
           if (Math.abs(dx) < deadzone) dx = 0;
           if (Math.abs(dy) < deadzone) dy = 0;
-          vx += dx * sensitivity * (1-smoothing);
-          vy += dy * sensitivity * (1-smoothing);
+          vx = dx * sensitivity;
+          vy = dy * sensitivity;
         }
       });
 
@@ -133,9 +130,9 @@
     }
 
     function update() {
-      if (player) {
-        player.x += vx * 0.1;
-        player.y += vy * 0.1;
+      if (player && player.body) {
+        // Use velocity instead of manually moving
+        player.body.setVelocity(vx, vy);
         vx *= smoothing;
         vy *= smoothing;
       }
