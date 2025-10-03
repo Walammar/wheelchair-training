@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Wheelchair Training — Multi Levels</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  <style>
+    body { margin:0; background:#222; }
+    #ui { position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.55); padding:8px; border-radius:6px; color:#fff; font-family:sans-serif; }
+    label{display:block; font-size:12px; margin-top:4px;}
+  </style>
+</head>
+<body>
+<div id="ui">
+  <label>Sensitivity <input id="sensitivity" type="range" min="0.05" max="1.0" step="0.01" value="0.3"></label>
+  <label>Deadzone (%) <input id="deadzone" type="range" min="0" max="0.3" step="0.01" value="0.08"></label>
+  <label>Smoothing <input id="smoothing" type="range" min="0" max="0.95" step="0.01" value="0.85"></label>
+  <label><input id="invertX" type="checkbox"> Invert X</label>
+  <label><input id="hideCursor" type="checkbox" checked> Hide Cursor</label>
+  <p id="status">Level 1</p>
+</div>
+
+<script>
+(() => {
+  const config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    backgroundColor: '#111',
+    physics: { default: 'arcade', arcade: { debug:false } },
+    scene: [ LevelScene ]
+  };
+  new Phaser.Game(config);
+
+  const levels = [
+    { walls:[ [400,300,600,20] ], goal:[740,300] },
+    { walls:[ [400,200,400,20], [600,400,20,400] ], goal:[740,540] },
+    { walls:[ [200,200,400,20], [400,400,400,20], [600,300,20,300] ], goal:[740,540] }
+  ];
+
+  let currentLevel = 0;
+  let targetX=0,targetY=0, smoothedX=0,smoothedY=0;
+
+  function LevelScene(){
+    Phaser.Scene.call(this,{key:'LevelScene'});
+  }
+  LevelScene.prototype=Object.create(Phaser.Scene.prototype);
+
+  LevelScene.prototype.create=function(){
+    buildLevel(this, levels[currentLevel]);
+    const updateCursor = ()=>{document.body.style.cursor=document.getElementById('hideCursor').checked?'none':'default';};
+    document.getElementById('hideCursor').addEventListener('change',updateCursor);
+    updateCursor();
+
+    this.input.on('pointermove', pointer=>{
+      const rect=this.game.canvas.getBoundingClientRect();
+      const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+      targetX=(pointer.clientX-cx)/(rect.width/2);
+      targetY=(pointer.clientY-cy)/(rect.height/2);
+    });
+  };
+
+  function buildLevel(scene, def){
+    scene.physics.world.colliders.destroy();
+    if(scene.player){ scene.player.destroy(); }
+    if(scene.walls){ scene.walls.clear(true,true); }
+    if(scene.goal){ scene.goal.destroy(); }
+
+    scene.player=scene.add.circle(60,60,20,0x6699ff);
+    scene.physics.add.existing(scene.player);
+    scene.player.body.setCollideWorldBounds(true);
+
+    scene.walls=scene.physics.add.staticGroup();
+    scene.walls.create(400,10,'').setDisplaySize(800,20).refreshBody();
+    scene.walls.create(400,590,'').setDisplaySize(800,20).refreshBody();
+    scene.walls.create(10,300,'').setDisplaySize(20,600).refreshBody();
+    scene.walls.create(790,300,'').setDisplaySize(20,600).refreshBody();
+    def.walls.forEach(w=>{
+      scene.walls.create(w[0],w[1],'').setDisplaySize(w[2],w[3]).refreshBody();
+    });
+
+    scene.goal=scene.add.rectangle(def.goal[0],def.goal[1],40,40,0x00ff00);
+    scene.physics.add.existing(scene.goal,true);
+
+    scene.physics.add.collider(scene.player,scene.walls,()=>resetPlayer(scene));
+    scene.physics.add.overlap(scene.player,scene.goal,()=>levelComplete(scene));
+    document.getElementById('status').innerText=`Level ${currentLevel+1}`;
+  }
+
+  function resetPlayer(scene){
+    scene.player.x=60; scene.player.y=60;
+    smoothedX=0; smoothedY=0;
+  }
+
+  function levelComplete(scene){
+    currentLevel++;
+    if(currentLevel>=levels.length){
+      alert("🏆 All levels complete!");
+      currentLevel=0;
+    } else {
+      alert("✅ Level Complete!");
+    }
+    buildLevel(scene, levels[currentLevel]);
+  }
+
+  LevelScene.prototype.update=function(){
+    const sens=parseFloat(document.getElementById('sensitivity').value);
+    const dead=parseFloat(document.getElementById('deadzone').value);
+    const smoothFactor=parseFloat(document.getElementById('smoothing').value);
+    const invX=document.getElementById('invertX').checked;
+
+    let x=invX?-targetX:targetX, y=targetY;
+    const len=Math.hypot(x,y);
+    if(len<dead){x=0;y=0;}
+    x*=sens; y*=sens;
+    smoothedX=smoothedX*smoothFactor+x*(1-smoothFactor);
+    smoothedY=smoothedY*smoothFactor+y*(1-smoothFactor);
+
+    this.player.body.setVelocity(smoothedX*200, smoothedY*200);
+  };
+})();
+</script>
+</body>
+</html>
