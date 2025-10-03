@@ -2,22 +2,22 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Wheelchair Training — Pointer Lock Joystick</title>
+  <title>Wheelchair Training — Absolute Position Control</title>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
   <style>
     body { margin:0; background:#222; color:#fff; font-family:sans-serif; }
     #instructions {
-      position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-      background:rgba(0,0,0,0.7); padding:20px; border-radius:10px;
+      position:absolute; top:10px; left:10px; 
+      background:rgba(0,0,0,0.5); padding:10px; border-radius:8px;
     }
   </style>
 </head>
 <body>
 
 <div id="instructions">
-  <h2>Click to start</h2>
-  <p>Your Optima joystick will now control the wheelchair.<br>
-  Move it to navigate. Press ESC to release control.</p>
+  <h2>Wheelchair Training</h2>
+  <p>Move your Optima joystick (mouse input) to control the red circle.<br>
+  Reach the green square to win.</p>
 </div>
 
 <script>
@@ -32,16 +32,15 @@
   };
   const game = new Phaser.Game(config);
 
-  let player, walls, goal;
-  let vx = 0, vy = 0;
+  let player, vx=0, vy=0, goal, walls;
 
   function preload(){}
 
   function create(){
     const scene = this;
 
-    // Player
-    player = this.add.circle(400,300,20,0x6699ff);
+    // Player - large red circle for visibility
+    player = this.add.circle(400,300,50,0xff0000);
     this.physics.add.existing(player);
     player.body.setCollideWorldBounds(true);
 
@@ -53,35 +52,28 @@
     walls.create(790,300,'').setDisplaySize(20,600).refreshBody();
 
     // Goal
-    goal = this.add.rectangle(740,540,40,40,0x00ff00);
+    goal = this.add.rectangle(740,540,60,60,0x00ff00);
     this.physics.add.existing(goal,true);
 
     this.physics.add.collider(player,walls);
     this.physics.add.overlap(player,goal,()=>alert("✅ Goal Reached!"));
 
-    // Pointer lock activation
-    this.input.on('pointerdown', () => {
-      this.input.mouse.requestPointerLock();
-    });
-
-    // Capture movement deltas
-    this.input.mouse.disableContextMenu();
+    // Pointer move - absolute position relative to center
     this.input.on('pointermove', (pointer) => {
-      if (this.input.mouse.locked) {
-        vx += pointer.movementX;
-        vy += pointer.movementY;
-      }
+      const rect = this.game.canvas.getBoundingClientRect();
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+
+      const dx = (pointer.x - cx) / (rect.width / 2);
+      const dy = (pointer.y - cy) / (rect.height / 2);
+
+      vx = dx * 300; // scale factor for speed
+      vy = dy * 300;
     });
   }
 
   function update(){
-    // Scale velocity down so it's not crazy fast
-    const speed = 2;
-    player.body.setVelocity(vx*speed, vy*speed);
-
-    // Apply damping to simulate friction
-    vx *= 0.9;
-    vy *= 0.9;
+    player.body.setVelocity(vx, vy);
   }
 })();
 </script>
