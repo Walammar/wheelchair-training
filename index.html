@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Wheelchair Training</title>
+  <title>Wheelchair Training - Step Joystick + Max Speed</title>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
   <style>
     body, html { margin:0; padding:0; overflow:hidden; height:100%; background:#000; }
@@ -11,7 +11,7 @@
     #settingsPanel {
       position: absolute; top: 10px; left: 10px;
       background: rgba(255,255,255,0.9); padding:10px; border-radius:8px;
-      display: none; z-index: 5; width: 220px;
+      display: none; z-index: 5; width: 240px;
     }
     #toggleBtn {
       position: absolute; top: 10px; left: 10px; z-index:6;
@@ -32,9 +32,10 @@
 <body>
   <button id="toggleBtn">⚙️</button>
   <div id="settingsPanel">
-    <label>Sensitivity <input type="range" id="sensitivity" min="0.1" max="5" step="0.1" value="1"></label><br>
+    <label>Sensitivity <input type="range" id="sensitivity" min="1" max="20" step="1" value="5"></label><br>
     <label>Deadzone <input type="range" id="deadzone" min="0" max="20" step="1" value="5"></label><br>
-    <label>Smoothing <input type="range" id="smoothing" min="0" max="0.9" step="0.1" value="0"></label><br>
+    <label>Max Speed <input type="range" id="maxSpeed" min="50" max="500" step="10" value="200"></label>
+    <span id="maxSpeedLabel">200</span><br>
     <label>Player Size <input type="range" id="playerSize" min="20" max="100" step="5" value="50"></label><br>
     <label><input type="checkbox" id="invertX"> Invert X</label><br>
     <label><input type="checkbox" id="hideCursor"> Hide Cursor</label><br>
@@ -53,8 +54,7 @@
     let player, goal;
     let walls = [];
     let obstacles = [];
-    let sensitivity = 1, deadzone = 5, smoothing = 0;
-    let vx=0, vy=0;
+    let sensitivity = 5, deadzone = 5, maxSpeed = 200;
     let invertX = false;
     let playerColor = 0x0000ff;
     let wallColor = 0xaaaaaa;
@@ -118,8 +118,17 @@
           if (invertX) dx = -dx;
           if (Math.abs(dx) < deadzone) dx = 0;
           if (Math.abs(dy) < deadzone) dy = 0;
-          vx = dx * sensitivity;
-          vy = dy * sensitivity;
+          // Calculate step velocity
+          let vx = dx * sensitivity;
+          let vy = dy * sensitivity;
+          // Apply max speed limiter
+          if (vx > maxSpeed) vx = maxSpeed;
+          if (vx < -maxSpeed) vx = -maxSpeed;
+          if (vy > maxSpeed) vy = maxSpeed;
+          if (vy < -maxSpeed) vy = -maxSpeed;
+
+          player.body.setVelocity(vx, vy);
+          setTimeout(()=>{ if(player) player.body.setVelocity(0,0); }, 50);
         }
       });
 
@@ -130,12 +139,7 @@
     }
 
     function update() {
-      if (player && player.body) {
-        // Use velocity instead of manually moving
-        player.body.setVelocity(vx, vy);
-        vx *= smoothing;
-        vy *= smoothing;
-      }
+      // Step-based, no continuous velocity
     }
 
     function addObstacles(scene) {
@@ -157,7 +161,10 @@
     };
     document.getElementById('sensitivity').oninput = e=> sensitivity=parseFloat(e.target.value);
     document.getElementById('deadzone').oninput = e=> deadzone=parseFloat(e.target.value);
-    document.getElementById('smoothing').oninput = e=> smoothing=parseFloat(e.target.value);
+    document.getElementById('maxSpeed').oninput = e=> { 
+      maxSpeed=parseFloat(e.target.value); 
+      document.getElementById('maxSpeedLabel').innerText = maxSpeed;
+    };
     document.getElementById('playerSize').oninput = e=> { if(player) player.setRadius(parseInt(e.target.value)); };
     document.getElementById('invertX').onchange = e=> invertX=e.target.checked;
     document.getElementById('hideCursor').onchange = e=> document.body.style.cursor=e.target.checked?'none':'default';
