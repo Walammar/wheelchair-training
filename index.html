@@ -1,177 +1,173 @@
-<!doctype html>
-<html>
+
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Wheelchair Training — Static Obstacles</title>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Wheelchair Training</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
   <style>
-    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#222; }
-    canvas { display:block; }
-    #panelToggle {
-      position:absolute; top:10px; left:10px; z-index:20;
-      background:#444; color:#fff; padding:6px 10px; border:none; border-radius:4px;
+    body, html { margin:0; padding:0; overflow:hidden; height:100%; background:#000; }
+    #gameContainer { width:100%; height:100%; }
+    #settingsPanel {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(255,255,255,0.9); padding:10px; border-radius:8px;
+      display: none; z-index: 5; width: 220px;
     }
-    #controlPanel {
-      position:absolute; top:50px; left:10px; z-index:19;
-      background:rgba(0,0,0,0.85); color:#fff; padding:10px; border-radius:8px;
-      max-width:240px; display:none;
+    #toggleBtn {
+      position: absolute; top: 10px; left: 10px; z-index:6;
+      background:#333; color:white; border:none; padding:5px 10px; border-radius:5px;
     }
-    #controlPanel label { font-size:13px; display:block; margin-top:6px; }
-    #controlPanel input[type=range], 
-    #controlPanel input[type=color] { width:100%; }
-    #controlPanel button { margin-top:10px; width:100%; padding:6px; border:none; border-radius:4px; background:#666; color:#fff; }
+    #overlay {
+      position: absolute; top:0; left:0; width:100%; height:100%;
+      background: rgba(0,0,0,0.7); color:white; display:none;
+      justify-content:center; align-items:center; flex-direction:column;
+      z-index:10; font-size:2em;
+    }
+    #overlay button {
+      margin-top:20px; padding:10px 20px; font-size:1em; border:none; border-radius:5px;
+      background:#fff; color:#000;
+    }
   </style>
 </head>
 <body>
+  <button id="toggleBtn">⚙️</button>
+  <div id="settingsPanel">
+    <label>Sensitivity <input type="range" id="sensitivity" min="0.1" max="5" step="0.1" value="1"></label><br>
+    <label>Deadzone <input type="range" id="deadzone" min="0" max="20" step="1" value="5"></label><br>
+    <label>Smoothing <input type="range" id="smoothing" min="0" max="0.9" step="0.1" value="0"></label><br>
+    <label>Player Size <input type="range" id="playerSize" min="20" max="100" step="5" value="50"></label><br>
+    <label><input type="checkbox" id="invertX"> Invert X</label><br>
+    <label><input type="checkbox" id="hideCursor"> Hide Cursor</label><br>
+    <label>Player Color <input type="color" id="playerColor" value="#0000ff"></label><br>
+    <label>Wall Color <input type="color" id="wallColor" value="#aaaaaa"></label><br>
+    <label>Goal Color <input type="color" id="goalColor" value="#00ff00"></label><br>
+    <label><input type="checkbox" id="toggleObstacles" checked> Obstacles</label>
+  </div>
+  <div id="overlay">
+    <div id="message">Goal Reached</div>
+    <button onclick="resetGame()">Reset</button>
+  </div>
+  <div id="gameContainer"></div>
 
-<button id="panelToggle">⚙️ Settings</button>
-<div id="controlPanel">
-  <label>Sensitivity <input id="sensitivity" type="range" min="0.1" max="2" step="0.05" value="0.6"></label>
-  <label>Deadzone (%) <input id="deadzone" type="range" min="0" max="0.3" step="0.01" value="0.08"></label>
-  <label>Smoothing <input id="smoothing" type="range" min="0" max="0.95" step="0.01" value="0"></label>
-  <label>Player Size <input id="playerSize" type="range" min="20" max="100" step="1" value="50"></label>
-  <label><input id="invertX" type="checkbox"> Invert X</label>
-  <label><input id="hideCursor" type="checkbox" checked> Hide Cursor</label>
-  <label>Player Color <input id="playerColor" type="color" value="#3366ff"></label>
-  <label>Wall Color <input id="wallColor" type="color" value="#bbbbbb"></label>
-  <label>Goal Color <input id="goalColor" type="color" value="#00aa00"></label>
-  <label><input id="obstaclesToggle" type="checkbox" checked> Enable Obstacles</label>
-  <button id="resetBtn">🔄 Reset</button>
-</div>
+  <script>
+    let player, goal, cursors;
+    let walls = [];
+    let obstacles = [];
+    let sensitivity = 1, deadzone = 5, smoothing = 0;
+    let vx=0, vy=0;
+    let invertX = false;
+    let rawMode = true;
+    let locked = false;
+    let playerColor = 0x0000ff;
+    let wallColor = 0xaaaaaa;
+    let goalColor = 0x00ff00;
 
-<script>
-(() => {
-  const config = {
-    type: Phaser.AUTO,
-    width: window.innerWidth,
-    height: window.innerHeight,
-    backgroundColor: '#111',
-    physics: { default: 'arcade', arcade: { debug:false } },
-    scene: { preload, create, update }
-  };
-  const game = new Phaser.Game(config);
+    const overlay = document.getElementById('overlay');
+    const messageEl = document.getElementById('message');
 
-  let player, vx=0, vy=0, goal, walls, obstacles;
-  let startX = 120, startY = 120;
-
-  let playerColor = 0x3366ff;
-  let wallColor = 0xbbbbbb;
-  let goalColor = 0x00aa00;
-
-  function preload(){}
-
-  function create(){
-    const scene = this;
-
-    // Player
-    player = this.add.circle(startX,startY,50,playerColor);
-    this.physics.add.existing(player);
-    player.body.setCollideWorldBounds(true);
-
-    // Walls
-    walls = this.physics.add.staticGroup();
-    addWall(scene,config.width/2,10,config.width,20);
-    addWall(scene,config.width/2,config.height-10,config.width,20);
-    addWall(scene,10,config.height/2,20,config.height);
-    addWall(scene,config.width-10,config.height/2,20,config.height);
-
-    // Obstacles
-    obstacles = this.physics.add.staticGroup();
-    addObstacle(scene, config.width/2, config.height/2, 150, 20);
-    addObstacle(scene, config.width/3, config.height/1.5, 100, 20);
-    addObstacle(scene, config.width/1.5, config.height/3, 120, 20);
-
-    // Goal
-    goal = this.add.rectangle(config.width-80,config.height-60,60,60,goalColor);
-    this.physics.add.existing(goal,true);
-
-    this.physics.add.collider(player,walls);
-    this.physics.add.collider(player,obstacles);
-    this.physics.add.overlap(player,goal,()=>alert("✅ Goal Reached!"));
-
-    // Pointer move - absolute position relative to center
-    this.input.on('pointermove', (pointer) => {
-      const rect = this.game.canvas.getBoundingClientRect();
-      const cx = rect.width / 2;
-      const cy = rect.height / 2;
-      let dx = (pointer.x - cx) / (rect.width/2);
-      let dy = (pointer.y - cy) / (rect.height/2);
-
-      const dead = parseFloat(document.getElementById('deadzone').value);
-      const sens = parseFloat(document.getElementById('sensitivity').value);
-      const invX = document.getElementById('invertX').checked;
-
-      if(invX) dx = -dx;
-
-      const mag = Math.sqrt(dx*dx+dy*dy);
-      if(mag<dead){ dx=0; dy=0; }
-
-      vx = dx * sens * 300;
-      vy = dy * sens * 300;
-    });
-
-    // Reset button
-    document.getElementById('resetBtn').addEventListener('click', ()=>{
-      player.x=startX; player.y=startY; player.body.setVelocity(0,0);
-    });
-  }
-
-  function addWall(scene,x,y,w,h){
-    let wall = scene.add.rectangle(x,y,w,h,wallColor);
-    scene.physics.add.existing(wall,true);
-    walls.add(wall);
-  }
-
-  function addObstacle(scene,x,y,w,h){
-    let obs = scene.add.rectangle(x,y,w,h,0x888888);
-    scene.physics.add.existing(obs,true);
-    obstacles.add(obs);
-  }
-
-  function update(){
-    const smooth = parseFloat(document.getElementById('smoothing').value);
-    player.body.setVelocity(
-      player.body.velocity.x * smooth + vx*(1-smooth),
-      player.body.velocity.y * smooth + vy*(1-smooth)
-    );
-
-    // update size & colors
-    const newSize = parseInt(document.getElementById('playerSize').value);
-    player.setRadius(newSize);
-
-    const newPlayerColor = Phaser.Display.Color.HexStringToColor(document.getElementById('playerColor').value).color;
-    if(newPlayerColor !== playerColor){ player.fillColor=newPlayerColor; playerColor=newPlayerColor; }
-
-    const newWallColor = Phaser.Display.Color.HexStringToColor(document.getElementById('wallColor').value).color;
-    if(newWallColor !== wallColor){
-      wallColor=newWallColor;
-      walls.children.each(w=>w.fillColor=wallColor);
+    function resetGame() {
+      overlay.style.display = 'none';
+      player.x = 100; player.y = 100;
     }
 
-    const newGoalColor = Phaser.Display.Color.HexStringToColor(document.getElementById('goalColor').value).color;
-    if(newGoalColor !== goalColor){ goalColor=newGoalColor; goal.fillColor=goalColor; }
+    const config = {
+      type: Phaser.AUTO,
+      parent: 'gameContainer',
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: '#ffffff',
+      physics: { default: 'arcade', arcade: { debug:false }},
+      scene: { preload, create, update }
+    };
 
-    // Toggle obstacles
-    const toggle = document.getElementById('obstaclesToggle').checked;
-    obstacles.children.each(obs => obs.visible=toggle);
+    const game = new Phaser.Game(config);
 
-    // hide cursor
-    document.body.style.cursor = document.getElementById('hideCursor').checked ? 'none':'default';
-  }
+    function preload() {}
 
-  // Collapsible panel toggle
-  document.getElementById('panelToggle').addEventListener('click', ()=>{
-    const panel=document.getElementById('controlPanel');
-    panel.style.display = (panel.style.display==='none' || panel.style.display==='') ? 'block':'none';
-  });
+    function create() {
+      player = this.add.circle(100, 100, 50, playerColor);
+      this.physics.add.existing(player);
+      player.body.setCollideWorldBounds(true);
 
-  // Resize handling
-  window.addEventListener('resize', ()=>{
-    game.scale.resize(window.innerWidth, window.innerHeight);
-  });
+      goal = this.add.rectangle(config.width-150, config.height-150, 100, 100, goalColor);
+      this.physics.add.existing(goal);
 
-})();
-</script>
+      // Walls
+      let wallTop = this.add.rectangle(config.width/2, 0, config.width, 20, wallColor).setOrigin(0.5,0);
+      let wallBottom = this.add.rectangle(config.width/2, config.height, config.width, 20, wallColor).setOrigin(0.5,1);
+      let wallLeft = this.add.rectangle(0, config.height/2, 20, config.height, wallColor).setOrigin(0,0.5);
+      let wallRight = this.add.rectangle(config.width, config.height/2, 20, config.height, wallColor).setOrigin(1,0.5);
+      walls = [wallTop, wallBottom, wallLeft, wallRight];
+      walls.forEach(w => { this.physics.add.existing(w, true); this.physics.add.collider(player, w); });
 
+      // Obstacles
+      addObstacles(this);
+
+      this.physics.add.overlap(player, goal, () => {
+        messageEl.innerText = 'Goal Reached';
+        overlay.style.display = 'flex';
+      });
+
+      this.input.on('pointerdown', () => {
+        if (!locked) {
+          this.input.mouse.requestPointerLock();
+        }
+      });
+
+      this.input.on('pointermove', (pointer) => {
+        if (this.input.mouse.locked) {
+          let dx = pointer.movementX;
+          let dy = pointer.movementY;
+          if (invertX) dx = -dx;
+          if (Math.abs(dx) < deadzone) dx = 0;
+          if (Math.abs(dy) < deadzone) dy = 0;
+          vx += dx * sensitivity * (1-smoothing);
+          vy += dy * sensitivity * (1-smoothing);
+        }
+      });
+
+      this.physics.add.collider(player, obstacles, () => {
+        messageEl.innerText = 'Game Over';
+        overlay.style.display = 'flex';
+      });
+    }
+
+    function update() {
+      if (player) {
+        player.x += vx * 0.1;
+        player.y += vy * 0.1;
+        vx *= smoothing;
+        vy *= smoothing;
+      }
+    }
+
+    function addObstacles(scene) {
+      obstacles.forEach(o=>o.destroy());
+      obstacles = [];
+      if (!document.getElementById('toggleObstacles').checked) return;
+      let obs1 = scene.add.rectangle(config.width/2, config.height/2, 200, 40, 0x888888);
+      let obs2 = scene.add.rectangle(config.width/2+150, config.height/2-100, 40, 200, 0x888888);
+      obstacles = [obs1, obs2];
+      obstacles.forEach(o => { scene.physics.add.existing(o, true); scene.physics.add.collider(player,o,()=>{
+        messageEl.innerText = 'Game Over'; overlay.style.display = 'flex';
+      }); });
+    }
+
+    // UI Events
+    document.getElementById('toggleBtn').onclick = ()=>{
+      let sp = document.getElementById('settingsPanel');
+      sp.style.display = sp.style.display==='block' ? 'none' : 'block';
+    };
+    document.getElementById('sensitivity').oninput = e=> sensitivity=parseFloat(e.target.value);
+    document.getElementById('deadzone').oninput = e=> deadzone=parseFloat(e.target.value);
+    document.getElementById('smoothing').oninput = e=> smoothing=parseFloat(e.target.value);
+    document.getElementById('playerSize').oninput = e=> { if(player) player.setRadius(parseInt(e.target.value)); };
+    document.getElementById('invertX').onchange = e=> invertX=e.target.checked;
+    document.getElementById('hideCursor').onchange = e=> document.body.style.cursor=e.target.checked?'none':'default';
+    document.getElementById('playerColor').oninput = e=> { playerColor=Phaser.Display.Color.HexStringToColor(e.target.value).color; if(player) player.fillColor=playerColor; };
+    document.getElementById('wallColor').oninput = e=> { wallColor=Phaser.Display.Color.HexStringToColor(e.target.value).color; walls.forEach(w=>w.fillColor=wallColor); };
+    document.getElementById('goalColor').oninput = e=> { goalColor=Phaser.Display.Color.HexStringToColor(e.target.value).color; if(goal) goal.fillColor=goalColor; };
+    document.getElementById('toggleObstacles').onchange = ()=> addObstacles(game.scene.keys.default);
+  </script>
 </body>
 </html>
