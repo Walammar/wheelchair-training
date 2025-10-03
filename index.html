@@ -2,22 +2,22 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Wheelchair Training — Fixed Debug Version</title>
+  <title>Wheelchair Training — Pointer Lock Joystick</title>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
   <style>
-    body { margin:0; background:#222; }
-    #ui { position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.55); padding:8px; border-radius:6px; color:#fff; font-family:sans-serif; }
-    label{display:block; font-size:12px; margin-top:4px;}
+    body { margin:0; background:#222; color:#fff; font-family:sans-serif; }
+    #instructions {
+      position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+      background:rgba(0,0,0,0.7); padding:20px; border-radius:10px;
+    }
   </style>
 </head>
 <body>
-<div id="ui">
-  <label>Sensitivity <input id="sensitivity" type="range" min="0.05" max="1.0" step="0.01" value="0.3"></label>
-  <label>Deadzone (%) <input id="deadzone" type="range" min="0" max="0.3" step="0.01" value="0.08"></label>
-  <label>Smoothing <input id="smoothing" type="range" min="0" max="0.95" step="0.01" value="0.85"></label>
-  <label><input id="invertX" type="checkbox"> Invert X</label>
-  <label><input id="hideCursor" type="checkbox" checked> Hide Cursor</label>
-  <p id="status">Level 1</p>
+
+<div id="instructions">
+  <h2>Click to start</h2>
+  <p>Your Optima joystick will now control the wheelchair.<br>
+  Move it to navigate. Press ESC to release control.</p>
 </div>
 
 <script>
@@ -27,69 +27,64 @@
     width: 800,
     height: 600,
     backgroundColor: '#111',
-    physics: { default: 'arcade', arcade: { debug:true } },
-    scene: [ LevelScene ]
+    physics: { default: 'arcade', arcade: { debug:false } },
+    scene: { preload, create, update }
   };
-  new Phaser.Game(config);
+  const game = new Phaser.Game(config);
 
-  const levels = [
-    { walls:[ [400,300,600,20] ], goal:[740,300] }
-  ];
+  let player, walls, goal;
+  let vx = 0, vy = 0;
 
-  let targetX=0,targetY=0, smoothedX=0,smoothedY=0;
+  function preload(){}
 
-  function LevelScene(){
-    Phaser.Scene.call(this,{key:'LevelScene'});
-  }
-  LevelScene.prototype=Object.create(Phaser.Scene.prototype);
+  function create(){
+    const scene = this;
 
-  LevelScene.prototype.create=function(){
-    buildLevel(this, levels[0]);
-    const updateCursor = ()=>{document.body.style.cursor=document.getElementById('hideCursor').checked?'none':'default';};
-    document.getElementById('hideCursor').addEventListener('change',updateCursor);
-    updateCursor();
+    // Player
+    player = this.add.circle(400,300,20,0x6699ff);
+    this.physics.add.existing(player);
+    player.body.setCollideWorldBounds(true);
 
-    this.input.on('pointermove', pointer=>{
-      const rect=this.game.canvas.getBoundingClientRect();
-      const cx = rect.left + rect.width/2;
-      const cy = rect.top + rect.height/2;
-      targetX = (pointer.x - cx) / (rect.width/2);
-      targetY = (pointer.y - cy) / (rect.height/2);
-    });
-  };
-
-  function buildLevel(scene, def){
-    scene.physics.world.colliders.destroy();
-    if(scene.player){ scene.player.destroy(); }
-    if(scene.walls){ scene.walls.clear(true,true); }
-    if(scene.goal){ scene.goal.destroy(); }
-
-    // Big visible player in middle
-    scene.player = scene.add.circle(200,200,40,0xff0000);
-    scene.physics.add.existing(scene.player);
-    scene.player.body.setCollideWorldBounds(true);
-
-    // Simple walls
-    scene.walls = scene.physics.add.staticGroup();
-    scene.walls.create(400,10,'').setDisplaySize(800,20).refreshBody();
-    scene.walls.create(400,590,'').setDisplaySize(800,20).refreshBody();
-    scene.walls.create(10,300,'').setDisplaySize(20,600).refreshBody();
-    scene.walls.create(790,300,'').setDisplaySize(20,600).refreshBody();
+    // Walls
+    walls = this.physics.add.staticGroup();
+    walls.create(400,10,'').setDisplaySize(800,20).refreshBody();
+    walls.create(400,590,'').setDisplaySize(800,20).refreshBody();
+    walls.create(10,300,'').setDisplaySize(20,600).refreshBody();
+    walls.create(790,300,'').setDisplaySize(20,600).refreshBody();
 
     // Goal
-    scene.goal = scene.add.rectangle(def.goal[0],def.goal[1],40,40,0x00ff00);
-    scene.physics.add.existing(scene.goal,true);
+    goal = this.add.rectangle(740,540,40,40,0x00ff00);
+    this.physics.add.existing(goal,true);
 
-    scene.physics.add.collider(scene.player,scene.walls);
-    scene.physics.add.overlap(scene.player,scene.goal,()=>alert("✅ Goal Reached!"));
+    this.physics.add.collider(player,walls);
+    this.physics.add.overlap(player,goal,()=>alert("✅ Goal Reached!"));
+
+    // Pointer lock activation
+    this.input.on('pointerdown', () => {
+      this.input.mouse.requestPointerLock();
+    });
+
+    // Capture movement deltas
+    this.input.mouse.disableContextMenu();
+    this.input.on('pointermove', (pointer) => {
+      if (this.input.mouse.locked) {
+        vx += pointer.movementX;
+        vy += pointer.movementY;
+      }
+    });
   }
 
-  LevelScene.prototype.update=function(){
-    // Debug: auto move to test physics
-    // Replace with joystick logic later
-    this.player.body.setVelocity(100, 0);
-  };
+  function update(){
+    // Scale velocity down so it's not crazy fast
+    const speed = 2;
+    player.body.setVelocity(vx*speed, vy*speed);
+
+    // Apply damping to simulate friction
+    vx *= 0.9;
+    vy *= 0.9;
+  }
 })();
 </script>
+
 </body>
 </html>
