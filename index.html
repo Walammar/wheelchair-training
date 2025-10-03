@@ -66,7 +66,7 @@
     if(scene.walls){ scene.walls.clear(true,true); }
     if(scene.goal){ scene.goal.destroy(); }
 
-    scene.player=scene.add.circle(60,60,20,0x6699ff);
+    scene.player=scene.add.circle(120,120,20,0x6699ff);
     scene.physics.add.existing(scene.player);
     scene.player.body.setCollideWorldBounds(true);
 
