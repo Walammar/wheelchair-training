@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Wheelchair Training — Fullscreen with Settings</title>
+  <title>Wheelchair Training — Static Obstacles</title>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
   <style>
     html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#222; }
@@ -13,12 +13,13 @@
     }
     #controlPanel {
       position:absolute; top:50px; left:10px; z-index:19;
-      background:rgba(0,0,0,0.75); color:#fff; padding:10px; border-radius:8px;
-      max-width:220px; display:none;
+      background:rgba(0,0,0,0.85); color:#fff; padding:10px; border-radius:8px;
+      max-width:240px; display:none;
     }
     #controlPanel label { font-size:13px; display:block; margin-top:6px; }
     #controlPanel input[type=range], 
     #controlPanel input[type=color] { width:100%; }
+    #controlPanel button { margin-top:10px; width:100%; padding:6px; border:none; border-radius:4px; background:#666; color:#fff; }
   </style>
 </head>
 <body>
@@ -27,13 +28,15 @@
 <div id="controlPanel">
   <label>Sensitivity <input id="sensitivity" type="range" min="0.1" max="2" step="0.05" value="0.6"></label>
   <label>Deadzone (%) <input id="deadzone" type="range" min="0" max="0.3" step="0.01" value="0.08"></label>
-  <label>Smoothing <input id="smoothing" type="range" min="0" max="0.95" step="0.01" value="0.8"></label>
+  <label>Smoothing <input id="smoothing" type="range" min="0" max="0.95" step="0.01" value="0"></label>
   <label>Player Size <input id="playerSize" type="range" min="20" max="100" step="1" value="50"></label>
   <label><input id="invertX" type="checkbox"> Invert X</label>
   <label><input id="hideCursor" type="checkbox" checked> Hide Cursor</label>
   <label>Player Color <input id="playerColor" type="color" value="#3366ff"></label>
   <label>Wall Color <input id="wallColor" type="color" value="#bbbbbb"></label>
   <label>Goal Color <input id="goalColor" type="color" value="#00aa00"></label>
+  <label><input id="obstaclesToggle" type="checkbox" checked> Enable Obstacles</label>
+  <button id="resetBtn">🔄 Reset</button>
 </div>
 
 <script>
@@ -48,7 +51,9 @@
   };
   const game = new Phaser.Game(config);
 
-  let player, vx=0, vy=0, goal, walls;
+  let player, vx=0, vy=0, goal, walls, obstacles;
+  let startX = 120, startY = 120;
+
   let playerColor = 0x3366ff;
   let wallColor = 0xbbbbbb;
   let goalColor = 0x00aa00;
@@ -59,25 +64,32 @@
     const scene = this;
 
     // Player
-    player = this.add.circle(400,300,50,playerColor);
+    player = this.add.circle(startX,startY,50,playerColor);
     this.physics.add.existing(player);
     player.body.setCollideWorldBounds(true);
 
     // Walls
     walls = this.physics.add.staticGroup();
-    addWall(scene,400,10,800,20);
-    addWall(scene,400,config.height-10,800,20);
+    addWall(scene,config.width/2,10,config.width,20);
+    addWall(scene,config.width/2,config.height-10,config.width,20);
     addWall(scene,10,config.height/2,20,config.height);
     addWall(scene,config.width-10,config.height/2,20,config.height);
+
+    // Obstacles
+    obstacles = this.physics.add.staticGroup();
+    addObstacle(scene, config.width/2, config.height/2, 150, 20);
+    addObstacle(scene, config.width/3, config.height/1.5, 100, 20);
+    addObstacle(scene, config.width/1.5, config.height/3, 120, 20);
 
     // Goal
     goal = this.add.rectangle(config.width-80,config.height-60,60,60,goalColor);
     this.physics.add.existing(goal,true);
 
     this.physics.add.collider(player,walls);
+    this.physics.add.collider(player,obstacles);
     this.physics.add.overlap(player,goal,()=>alert("✅ Goal Reached!"));
 
-    // Mouse input mapping
+    // Pointer move - absolute position relative to center
     this.input.on('pointermove', (pointer) => {
       const rect = this.game.canvas.getBoundingClientRect();
       const cx = rect.width / 2;
@@ -91,12 +103,16 @@
 
       if(invX) dx = -dx;
 
-      // deadzone
       const mag = Math.sqrt(dx*dx+dy*dy);
       if(mag<dead){ dx=0; dy=0; }
 
       vx = dx * sens * 300;
       vy = dy * sens * 300;
+    });
+
+    // Reset button
+    document.getElementById('resetBtn').addEventListener('click', ()=>{
+      player.x=startX; player.y=startY; player.body.setVelocity(0,0);
     });
   }
 
@@ -106,15 +122,20 @@
     walls.add(wall);
   }
 
+  function addObstacle(scene,x,y,w,h){
+    let obs = scene.add.rectangle(x,y,w,h,0x888888);
+    scene.physics.add.existing(obs,true);
+    obstacles.add(obs);
+  }
+
   function update(){
-    // smoothing
     const smooth = parseFloat(document.getElementById('smoothing').value);
     player.body.setVelocity(
       player.body.velocity.x * smooth + vx*(1-smooth),
       player.body.velocity.y * smooth + vy*(1-smooth)
     );
 
-    // update size & colors live
+    // update size & colors
     const newSize = parseInt(document.getElementById('playerSize').value);
     player.setRadius(newSize);
 
@@ -129,6 +150,10 @@
 
     const newGoalColor = Phaser.Display.Color.HexStringToColor(document.getElementById('goalColor').value).color;
     if(newGoalColor !== goalColor){ goalColor=newGoalColor; goal.fillColor=goalColor; }
+
+    // Toggle obstacles
+    const toggle = document.getElementById('obstaclesToggle').checked;
+    obstacles.children.each(obs => obs.visible=toggle);
 
     // hide cursor
     document.body.style.cursor = document.getElementById('hideCursor').checked ? 'none':'default';
